@@ -37,7 +37,7 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS settings (setting_key TEXT PRIMARY 
 cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES ('sub_mode', 'ON')")
 conn.commit()
 
-# ================= 🟢 স্টার্ট ও হেল্প কমান্ড =================
+# ================= 🟢 স্টার্ট ও হেল্প কমান্ড (প্রফেশনাল ড্যাশবোর্ড) =================
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     user_id = message.from_user.id
@@ -46,23 +46,45 @@ def send_welcome(message):
         res = cursor.fetchone()
         sub_mode = res[0] if res else 'ON'
         
-        msg = f"<b>👋 হ্যালো এডমিন!</b>\n\n" \
-              f"⚙️ <b>বর্তমান মোড:</b> {sub_mode}\n\n" \
-              f"<b>আপনার এডমিন কমান্ডসমূহ:</b>\n" \
-              f"• 🟢 /sub_on - পেইড সাবস্ক্রিপশন মোড চালু\n" \
-              f"• 🔴 /sub_off - ফ্রি মোড চালু\n" \
-              f"• 📌 <code>/add_user [User_ID] [দিন]</code> - ইউজার সাবস্ক্রিপশন যোগ\n" \
-              f"• 📌 <code>/set_channel_timer [Channel_ID] [দিন]</code> - চ্যানেল টাইমার সেট\n" \
-              f"• 📁 /backup - ম্যানুয়াল ডাটাবেস ব্যাকআপ"
+        cursor.execute("SELECT COUNT(*) FROM users")
+        total_users = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM channel_timers")
+        total_channels = cursor.fetchone()[0]
+        
+        msg = f"<b>👑 প্রফেশনাল ভিআইপি সাবস্ক্রিপশন প্যানেল</b>\n" \
+              f"━━━━━━━━━━━━━━━━━━━━━━━\n" \
+              f"⚙️ <b>বর্তমান সিস্টেম স্ট্যাটাস:</b>\n" \
+              f"• সাবস্ক্রিপশন মোড: <b>{'🟢 পেইড (ON)' if sub_mode == 'ON' else '🔴 ফ্রি (OFF)'}</b>\n" \
+              f"• মোট অ্যাক্টিভ ইউজার: <b>{total_users} জন</b>\n" \
+              f"• নিবন্ধিত টাইমার চ্যানেল: <b>{total_channels} টি</b>\n\n" \
+              f"<b>🛠️ এডমিন কমান্ডসমূহ:</b>\n" \
+              f"• 🟢 <code>/sub_on</code> - পেইড সাবস্ক্রিপশন মোড চালু করুন\n" \
+              f"• 🔴 <code>/sub_off</code> - ফ্রি মোড চালু করুন (অটো জয়েন)\n" \
+              f"• 👤 <code>/add_user [User_ID] [দিন]</code> - ইউজার সাবস্ক্রিপশন যোগ করুন\n" \
+              f"• 🔒 <code>/set_channel_timer [Channel_ID] [দিন]</code> - চ্যানেল অটো-লক টাইমার সেট করুন\n" \
+              f"• 🔓 <code>/unlock_channel [Channel_ID]</code> - লক হওয়া চ্যানেল আনলক করুন\n" \
+              f"• 📁 <code>/backup</code> - ডাটাবেসের সেফটি ব্যাকআপ ফাইল সংগ্রহ করুন\n\n" \
+              f"<b>📖 প্র্যাক্টিক্যাল গাইডলাইন:</b>\n" \
+              f"১. প্রাইভেট চ্যানেলে বটকে <b>Admin</b> করে 'Ban Users' & 'Invite Users' পারমিশন দিন।\n" \
+              f"২. চ্যানেলের Invite Link সেটিংসে <b>Request Admin Approval</b> চালু রাখুন।\n" \
+              f"৩. ইউজার এড করতে <code>/add_user 12345678 30</code> লিখে সেন্ড করুন।"
         bot.reply_to(message, msg, parse_mode='HTML')
     else:
         cursor.execute("SELECT expire_date FROM users WHERE user_id = ?", (user_id,))
         result = cursor.fetchone()
         if result:
             exp = parse_date(result[0])
-            bot.reply_to(message, f"<b>👋 স্বাগতম!</b>\n\n⏳ আপনার সাবস্ক্রিপশনের মেয়াদ: {exp.strftime('%Y-%m-%d %H:%M')}", parse_mode='HTML')
+            msg = f"<b>👋 স্বাগতম!</b>\n\n" \
+                  f"🆔 আপনার ইউজার আইডি: <code>{user_id}</code>\n" \
+                  f"⏳ সাবস্ক্রিপশনের মেয়াদ: <b>{exp.strftime('%Y-%m-%d %H:%M:%S')}</b>\n\n" \
+                  f"✅ আপনার অ্যাক্টিভ সাবস্ক্রিপশন রয়েছে। চ্যানেলের প্রাইভেট লিংকে ক্লিক করে যুক্ত হন।"
         else:
-            bot.reply_to(message, "<b>👋 স্বাগতম!</b>\n\n⚠️ আপনার কোনো সক্রিয় সাবস্ক্রিপশন নেই।", parse_mode='HTML')
+            msg = f"<b>👋 স্বাগতম!</b>\n\n" \
+                  f"🆔 আপনার ইউজার আইডি: <code>{user_id}</code>\n" \
+                  f"⚠️ <b>অবস্থা:</b> আপনার কোনো সক্রিয় সাবস্ক্রিপশন নেই।\n\n" \
+                  f"চ্যানেলে প্রবেশ করার জন্য এডমিনের সাথে যোগাযোগ করে সাবস্ক্রিপশন নিশ্চিত করুন।"
+        bot.reply_to(message, msg, parse_mode='HTML')
 
 # ================= 🛡️ এডমিন কমান্ডস =================
 @bot.message_handler(commands=['sub_on'])
@@ -106,6 +128,19 @@ def set_channel_timer(message):
         bot.reply_to(message, f"🚨 <b>চ্যানেল টাইমার সেট!</b>\n📢 চ্যানেল: <code>{chat_id}</code>\n⏳ সময়: {days} দিন পর চ্যানেলটি পুরোপুরি লক হয়ে যাবে।", parse_mode='HTML')
     except Exception as e:
         bot.reply_to(message, "⚠️ <b>ভুল কমান্ড!</b> নিয়ম: <code>/set_channel_timer [Channel_ID] [দিন]</code>", parse_mode='HTML')
+
+# 📌 নতুন সংযুক্ত: লক চ্যানেল আনলক কমান্ড
+@bot.message_handler(commands=['unlock_channel'])
+def unlock_channel(message):
+    if message.from_user.id != ADMIN_ID: return
+    try:
+        parts = message.text.split()
+        chat_id = int(parts[1])
+        cursor.execute("DELETE FROM channel_timers WHERE chat_id = ?", (chat_id,))
+        conn.commit()
+        bot.reply_to(message, f"🔓 <b>চ্যানেল আনলক সফল!</b>\n📢 চ্যানেল: <code>{chat_id}</code>\nটাইমার মুছে ফেলা হয়েছে এবং চ্যানেলটি এখন সম্পূর্ণ সচল।", parse_mode='HTML')
+    except Exception as e:
+        bot.reply_to(message, "⚠️ <b>ভুল কমান্ড!</b> নিয়ম: <code>/unlock_channel [Channel_ID]</code>", parse_mode='HTML')
 
 @bot.message_handler(commands=['backup'])
 def send_backup(message):
