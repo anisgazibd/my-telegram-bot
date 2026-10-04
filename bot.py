@@ -75,7 +75,7 @@ def send_welcome(message):
               f"• 🔴 <code>/sub_on</code> - গ্লোবাল পেইড মোড চালু\n" \
               f"• 🟢 <code>/sub_off</code> - গ্লোবাল ফ্রি মোড চালু\n" \
               f"• 👤 <code>/add_user [User_ID] [দিন]</code> - ইউজার সাবস্ক্রিপশন যোগ করুন\n" \
-              f"• ❌ <code>/del_user [User_ID]</code> - ইউজার সাবস্ক্রিপশন বাতিল করুন\n" \
+              f"• ❌ <code>/del_user [User_ID]</code> - ইনস্ট্যান্ট ইউজার বাতিল ও চ্যানেল ব্যান\n" \
               f"• 🔒 <code>/set_channel_timer [Channel_ID] [দিন]</code> - চ্যানেল অটো-লক টাইমার\n" \
               f"• 🔓 <code>/unlock_channel [Channel_ID]</code> - লক চ্যানেল আনলক করুন\n" \
               f"• 💬 <code>/reply [User_ID] [মেসেজ]</code> - কাস্টম ইউজারকে মেসেজ পাঠান\n" \
@@ -152,14 +152,43 @@ def add_user_time(message):
     except Exception:
         bot.reply_to(message, "⚠️ <b>ভুল কমান্ড!</b> নিয়ম: <code>/add_user [User_ID] [দিন]</code>", parse_mode='HTML')
 
+# 📌 ইনস্ট্যান্ট চ্যানেল ব্যান ও রিমুভ সহ আপডেট করা /del_user কমান্ড
 @bot.message_handler(commands=['del_user'])
 def delete_user(message):
     if message.from_user.id != ADMIN_ID: return
     try:
         user_id = int(message.text.split()[1])
+        
+        # ১. ডাটাবেস থেকে ইউজারের যুক্ত থাকা চ্যানেলগুলো খুঁজে বের করা
+        cursor.execute("SELECT chat_id FROM user_channels WHERE user_id = ?", (user_id,))
+        user_chats = cursor.fetchall()
+        
+        removed_count = 0
+        # ২. চ্যানেলগুলো থেকে সাথে সাথে ইউজারকে ব্যান/রিমুভ করা
+        for chat in user_chats:
+            chat_id = chat[0]
+            try:
+                bot.ban_chat_member(chat_id, user_id)
+                removed_count += 1
+            except Exception: pass
+            
+        # ৩. ডাটাবেস থেকে মুছে ফেলা
         cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM user_channels WHERE user_id = ?", (user_id,))
         conn.commit()
-        bot.reply_to(message, f"🗑️ <b>ইউজার সাবস্ক্রিপশন বাতিল করা হয়েছে!</b>\n👤 আইডি: <code>{user_id}</code>", parse_mode='HTML')
+        
+        # ৪. ইউজারকে সাথে সাথে নোটিফিকেশন দেওয়া
+        try:
+            bot.send_message(user_id, "⚠️️ <b>আপনার সাবস্ক্রিপশন এডমিন কর্তৃক বাতিল করা হয়েছে এবং আপনাকে চ্যানেল থেকে রিমুভ করা হয়েছে।</b>", parse_mode='HTML')
+        except Exception: pass
+
+        bot.reply_to(
+            message, 
+            f"🗑️ <b>ইউজার সাবস্ক্রিপশন বাতিল ও ব্যান সফল!</b>\n"
+            f"👤 আইডি: <code>{user_id}</code>\n"
+            f"📢 চ্যানেল থেকে রিমুভ করা হয়েছে: <b>{removed_count} টি</b>", 
+            parse_mode='HTML'
+        )
     except Exception:
         bot.reply_to(message, "⚠️ <b>ভুল কমান্ড!</b> নিয়ম: <code>/del_user [User_ID]</code>", parse_mode='HTML')
 
@@ -210,9 +239,9 @@ def send_backup(message):
         else:
             bot.reply_to(message, "⚠️ ডাটাবেস ফাইল পাওয়া যায়নি।")
     except Exception as e:
-        bot.reply_to(message, f"⚠️ ব্যাকআপ নিতে সমস্যা: {e}")
+        bot.reply_to(message, f"⚠️️ ব্যাকআপ নিতে সমস্যা: {e}")
 
-# ================= 🚪 জয়েন রিকোয়েস্ট হ্যান্ডেলার (স্মার্ট অ্যালগরিদম) =================
+# ================= 🚪 জয়েন রিকোয়েস্ট হ্যান্ডেলার =================
 @bot.chat_join_request_handler()
 def handle_join_request(message: telebot.types.ChatJoinRequest):
     user_id = message.from_user.id
@@ -243,7 +272,6 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
         elif mode_res[0] == 'PAID':
             is_paid_channel = True
     else:
-        # যদি নির্দিষ্ট চ্যানেলের মোড সেট না থাকে তবে গ্লোবাল মোড চেক করবে
         cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'sub_mode'")
         res = cursor.fetchone()
         if res and res[0] == 'OFF':
@@ -259,7 +287,7 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
         except Exception as e: print(f"Error: {e}")
         return
 
-    # ৪. চ্যানেল পেইড হলে ইউজার মোট সাবস্ক্রিপশন চেক
+    # ৪. চ্যানেল পেইড হলে ইউজার সাবস্ক্রিপশন চেক
     cursor.execute("SELECT expire_date FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     
@@ -274,7 +302,7 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
             except Exception as e: print(f"Error: {e}")
             return
 
-    # ৫. ইউজার সাবস্ক্রাইবড না থাকলে রিজেক্ট করে সুন্দর নোটিশ ও বাটন পাঠানো
+    # ৫. ইউজার সাবস্ক্রাইবড না থাকলে রিজেক্ট করা
     try:
         bot.decline_chat_join_request(chat_id, user_id)
         
@@ -294,7 +322,7 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
         bot.send_message(user_id, notice_msg, parse_mode='HTML', reply_markup=markup)
     except Exception: pass
 
-# ================= 💬 কাস্টমার সাপোর্ট ও লাইব মেসেজিং სისტেম =================
+# ================= 💬 কাস্টমার সাপোর্ট ও লাইভ মেসেজিং সিস্টেম =================
 @bot.message_handler(func=lambda message: message.from_user.id != ADMIN_ID, content_types=['text', 'photo', 'voice', 'document'])
 def handle_user_messages(message):
     user = message.from_user
