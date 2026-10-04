@@ -7,8 +7,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 # ================= ⚙️ কনফিগারেশন =================
 BOT_TOKEN = '8919161117:AAEFTcbYlxbgduHDmKdcRKeszSY9-szepQ8'
-PRIMARY_ADMIN_ID = 2132743108  # প্রাথমিক এডমিন আইডি
-MASTER_PASSWORD = 'Anis@2026'   # 🔑 আপনার সিক্রেট মাস্টার পাসওয়ার্ড
+PRIMARY_ADMIN_ID = 2132743108  # মূল প্রাইমারি এডমিন আইডি
+DEFAULT_MASTER_PASSWORD = 'Anis@2026'  # ডিফল্ট মাস্টার পাসওয়ার্ড
 
 bot = telebot.TeleBot(BOT_TOKEN)
 DB_FILE = 'pro_subscription.db'
@@ -49,6 +49,7 @@ def init_db():
     # ডিফল্ট সেটিংস সেটআপ
     cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES ('sub_mode', 'ON')")
     cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES ('admin_id', ?)", (str(PRIMARY_ADMIN_ID),))
+    cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES ('master_password', ?)", (DEFAULT_MASTER_PASSWORD,))
     conn.commit()
     conn.close()
 
@@ -64,6 +65,13 @@ def get_current_admin_id():
             pass
     return PRIMARY_ADMIN_ID
 
+def get_master_password():
+    """ডাটাবেস থেকে মাস্টার পাসওয়ার্ড রিড করে"""
+    res = db_query("SELECT setting_value FROM settings WHERE setting_key = 'master_password'", fetchone=True)
+    if res and res[0]:
+        return res[0]
+    return DEFAULT_MASTER_PASSWORD
+
 def parse_date(date_str):
     if not date_str:
         return datetime.now()
@@ -77,7 +85,7 @@ def parse_date(date_str):
                 pass
     return datetime.now()
 
-# ================= 🎛️ এডমিন স্থায়ী রিপ্লাই কীবোর্ড =================
+# ================= 🎛️️ এডমিন স্থায়ী রিপ্লাই কীবোর্ড =================
 def get_admin_reply_keyboard():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     
@@ -88,6 +96,7 @@ def get_admin_reply_keyboard():
     markup.add(KeyboardButton("🔒 চ্যানেল টাইমার"), KeyboardButton("🔓 চ্যানেল আনলক"))
     markup.add(KeyboardButton("🔗 ফোর্স চ্যানেল যোগ"), KeyboardButton("🗑 ফোর্স চ্যানেল মুছুন"))
     markup.add(KeyboardButton("📋 ফোর্স চ্যানেল তালিকা"), KeyboardButton("💬 ইউজার রিপ্লাই"))
+    markup.add(KeyboardButton("🔑 পাসওয়ার্ড পরিবর্তন"), KeyboardButton("👤 এডমিন রিসেট"))
     markup.add(KeyboardButton("📁 ব্যাকআপ ডাটাবেস"), KeyboardButton("🚨 ইমার্জেন্সি লকডাউন"))
     
     return markup
@@ -123,7 +132,8 @@ def process_master_login_command(message):
 
 def verify_master_password(message):
     entered_pass = message.text.strip()
-    if entered_pass == MASTER_PASSWORD:
+    current_pass = get_master_password()
+    if entered_pass == current_pass:
         new_admin_id = message.from_user.id
         db_query("UPDATE settings SET setting_value = ? WHERE setting_key = 'admin_id'", (str(new_admin_id),), commit=True)
         bot.reply_to(message, f"🎉 <b>অভিনন্দন! এডমিন অ্যাক্সেস সফলভাবে স্থানান্তরিত হয়েছে।</b>\n\n🆔 <b>নতুন এডমিন আইডি:</b> <code>{new_admin_id}</code>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
@@ -166,7 +176,7 @@ def send_welcome(message):
     "🔄 ড্যাশবোর্ড", "📋 চ্যানেল তালিকা", "🔴 গ্লোবাল পেইড (ON)", "🟢 গ্লোবাল ফ্রি (OFF)",
     "👤 ইউজার যোগ", "❌ ইউজার ব্যান", "🔴 চ্যানেল পেইড", "🟢 চ্যানেল ফ্রি", "⚙️ মোড রিসেট",
     "🔒 চ্যানেল টাইমার", "🔓 চ্যানেল আনলক", "💬 ইউজার রিপ্লাই", "📁 ব্যাকআপ ডাটাবেস", "🚨 ইমার্জেন্সি লকডাউন",
-    "🔗 ফোর্স চ্যানেল যোগ", "🗑 ফোর্স চ্যানেল মুছুন", "📋 ফোর্স চ্যানেল তালিকা"
+    "🔗 ফোর্স চ্যানেল যোগ", "🗑 ফোর্স চ্যানেল মুছুন", "📋 ফোর্স চ্যানেল তালিকা", "🔑 পাসওয়ার্ড পরিবর্তন", "👤 এডমিন রিসেট"
 ])
 def handle_admin_buttons(message):
     text = message.text
@@ -191,6 +201,14 @@ def handle_admin_buttons(message):
     elif text == "🚨 ইমার্জেন্সি লকডাউন":
         msg = bot.send_message(message.chat.id, "⚠️ <b>সতর্কতা! আপনি কি সমস্ত চ্যানেলের সকল মেম্বারকে ব্যান এবং চ্যানেল লক করতে চান?</b>\n\nনিশ্চিত করতে আপনার সিক্রেট মাস্টার পাসওয়ার্ড লিখুন:", parse_mode='HTML')
         bot.register_next_step_handler(msg, execute_emergency_lockdown)
+
+    elif text == "🔑 পাসওয়ার্ড পরিবর্তন":
+        msg = bot.send_message(message.chat.id, "🔑 <b>নতুন সিক্রেট মাস্টার পাসওয়ার্ডটি লিখুন:</b>", parse_mode='HTML')
+        bot.register_next_step_handler(msg, process_change_password)
+
+    elif text == "👤 এডমিন রিসেট":
+        db_query("UPDATE settings SET setting_value = ? WHERE setting_key = 'admin_id'", (str(PRIMARY_ADMIN_ID),), commit=True)
+        bot.reply_to(message, f"👤 <b>এডমিন এক্সেস সফলভাবে রিসেট করা হয়েছে!</b>\n\nঅন্য সকল এডমিন পাওয়ার বাতিল করে মূল প্রাইমারি এডমিন <code>{PRIMARY_ADMIN_ID}</code> কে পুনরায় এডমিন হিসেবে সেট করা হয়েছে।", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
 
     elif text == "👤 ইউজার যোগ":
         msg = bot.send_message(message.chat.id, "👤 <b>ইউজার আইডি এবং দিন লিখুন:</b>\n\n<i>উদাহরণ:</i> <code>123456789 30</code>", parse_mode='HTML')
@@ -234,6 +252,15 @@ def handle_admin_buttons(message):
 
     elif text == "📋 ফোর্স চ্যানেল তালিকা":
         list_force_channels(message)
+
+# ================= 🔑 পাসওয়ার্ড চেঞ্জ প্রসেসর =================
+def process_change_password(message):
+    new_pass = message.text.strip()
+    if len(new_pass) < 4:
+        bot.reply_to(message, "❌ পাসওয়ার্ড অন্তত ৪ অক্ষরের হতে হবে।", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
+        return
+    db_query("UPDATE settings SET setting_value = ? WHERE setting_key = 'master_password'", (new_pass,), commit=True)
+    bot.reply_to(message, f"🔑 <b>মাস্টার পাসওয়ার্ড পরিবর্তন সফল হয়েছে!</b>\n\nনতুন পাসওয়ার্ড: <code>{new_pass}</code>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
 
 # ================= 🔗 ফোর্স চ্যানেল ফাংশনস =================
 def process_add_force_channel(message):
@@ -282,7 +309,8 @@ def list_force_channels(message):
 
 # ================= 🚨 ইমার্জেন্সি এক্সিকিউশন =================
 def execute_emergency_lockdown(message):
-    if message.text.strip() != MASTER_PASSWORD:
+    current_pass = get_master_password()
+    if message.text.strip() != current_pass:
         bot.reply_to(message, "❌ <b>ভুল পাসওয়ার্ড!</b> ইমার্জেন্সি বাতিল করা হয়েছে।", parse_mode='HTML')
         return
 
@@ -415,7 +443,7 @@ def set_channel_timer(message):
         db_query("INSERT OR REPLACE INTO channel_timers (chat_id, expire_date) VALUES (?, ?)", (chat_id, expire_date), commit=True)
         bot.reply_to(message, f"🚨 <b>চ্যানেল টাইমার সেট!</b>\n📢 চ্যানেল: <code>{chat_id}</code>\n⏳ সময়: <b>{days} দিন</b>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     except Exception:
-        bot.reply_to(message, "⚠️️ <b>ভুল নিয়ম!</b> ব্যবহার: <code>/set_channel_timer [Channel_ID] [দিন]</code>", parse_mode='HTML')
+        bot.reply_to(message, "⚠️ <b>ভুল নিয়ম!</b> ব্যবহার: <code>/set_channel_timer [Channel_ID] [দিন]</code>", parse_mode='HTML')
 
 @bot.message_handler(commands=['unlock_channel'])
 def unlock_channel(message):
@@ -448,7 +476,7 @@ def send_backup(message):
             with open(DB_FILE, 'rb') as doc:
                 bot.send_document(current_admin, doc, caption=f"📁 ডাটাবেস ব্যাকআপ\nসময়: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
         else:
-            bot.reply_to(message, "⚠️ ডাটাবেস ফাইল পাওয়া যায়নি।")
+            bot.reply_to(message, "⚠️️ ডাটাবেস ফাইল পাওয়া যায়নি।")
     except Exception as e:
         bot.reply_to(message, f"⚠ ব্যাকআপ নিতে সমস্যা: {e}")
 
@@ -482,7 +510,7 @@ def handle_force_join_verify(call):
         missing_titles = "\n".join([f"• {m[3]}" for m in missing])
         bot.send_message(
             user_id, 
-            f"⚠️ <b>ভেরিফিকেশন অসম্পূর্ণ!</b>\n\nআপনি এখনো নিচের চ্যানেলগুলোতে জয়েন করেননি:\n{missing_titles}\n\nসবগুলোতে জয়েন করে পুনরায় '🔄 ভেরিফাই করুন' বাটনে চাপ দিন।", 
+            f"⚠️ <b>ভেরিফিকেশন অসম্পূর্ণ!</b>\n\nআপনি এখনো নিচের চ্যানেলগুলোতে জয়েন করেননি:\n{missing_titles}\n\nসবগুলোতে জয়েন করে পুনরায় '✨ 🔄 ভেরিফাই করুন (Verify) ✨' বাটনে চাপ দিন।", 
             parse_mode='HTML'
         )
 
@@ -505,7 +533,7 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
             except Exception: pass
             return
 
-    # ২. 🔗 কোর্স/ফোর্স জয়েন চ্যানেল চেক (অফার চ্যানেল কি না)
+    # ২. 🔗 কোর্স/ফোর্স জয়েন চ্যানেল চেক
     req_channels = db_query("SELECT req_chat_id, req_link, req_title FROM force_channels WHERE target_chat_id = ?", (chat_id,), fetchall=True) or []
     if req_channels:
         all_joined = True
@@ -531,10 +559,19 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
         else:
             try:
                 bot.decline_chat_join_request(chat_id, user_id)
-                markup = InlineKeyboardMarkup()
+                
+                # 📌 বাটনগুলোকে পাশাপাশি ২টি কলামে সাজানো
+                markup = InlineKeyboardMarkup(row_width=2)
+                btn_list = []
                 for rc in req_channels:
-                    markup.add(InlineKeyboardButton(f"📢 {rc[2]}", url=rc[1]))
-                markup.add(InlineKeyboardButton("🔄 ভেরিফাই করুন", callback_data=f"verify_fj_{chat_id}"))
+                    btn_list.append(InlineKeyboardButton(f"📢 {rc[2]}", url=rc[1]))
+                
+                # ২টি করে বাটন এক সারিতে যোগ
+                for i in range(0, len(btn_list), 2):
+                    markup.add(*btn_list[i:i+2])
+                
+                # কাস্টমাইজড আলাদা অ্যাকশন বাটন
+                markup.add(InlineKeyboardButton("✨ 🔄 ভেরিফাই করুন (Verify) ✨", callback_data=f"verify_fj_{chat_id}"))
                 markup.add(InlineKeyboardButton("💳 সরাসরি এডমিনকে মেসেজ দিন", url="https://t.me/anisgazibd"))
                 
                 notice_msg = f"<b>🎁 বিশেষ অফার! ফ্রি প্রিমিয়াম এক্সেস 🎁</b>\n" \
@@ -545,7 +582,7 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
                              f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" \
                              f"👉 <b>সহজ উপায়:</b>\n" \
                              f"১. নিচের প্রতিটি প্রমোশনাল চ্যানেলে ক্লিক করে জয়েন করুন।\n" \
-                             f"২. জয়েন শেষে <b>'🔄 ভেরিফাই করুন'</b> বাটনে চাপ দিন।\n" \
+                             f"২. জয়েন শেষে <b>'✨ 🔄 ভেরিফাই করুন (Verify) ✨'</b> বাটনে চাপ দিন।\n" \
                              f"৩. ভেরিফাই সফল হলে পুনরায় জয়েন লিংকে ক্লিক করে রিকোয়েস্ট পাঠান।"
                 
                 bot.send_message(user_id, notice_msg, parse_mode='HTML', reply_markup=markup)
