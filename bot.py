@@ -1,18 +1,5 @@
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-import sqlite3
-import os
-from datetime import datetime, timedelta
-from apscheduler.schedulers.background import BackgroundScheduler
-
-# ================= ⚙️ কনফিগারেশন =================
-BOT_TOKEN = '8919161117:AAEFTcbYlxbgduHDmKdcRKeszSY9-szepQ8'
-ADMIN_ID = 2132743108  # আপনার টেলিগ্রাম আইডি
-
-bot = telebot.TeleBot(BOT_TOKEN)
-
-import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 import sqlite3
 import os
 from datetime import datetime, timedelta
@@ -27,7 +14,6 @@ DB_FILE = 'pro_subscription.db'
 
 # ================= 🗄️ থ্রেড-সেফ ডাটাবেস হেল্পার =================
 def db_query(query, params=(), fetchone=False, fetchall=False, commit=False):
-    """প্রতিটি রিকোয়েস্টে পৃথক ডাটাবেস কানেকশন তৈরি করে থ্রেড-লক মুক্ত রাখে"""
     conn = sqlite3.connect(DB_FILE, timeout=10)
     cursor = conn.cursor()
     cursor.execute(query, params)
@@ -68,35 +54,17 @@ def parse_date(date_str):
                 pass
     return datetime.now()
 
-# ================= 🎛️ এডমিন কিবোর্ড ও ড্যাশবোর্ড =================
-def get_admin_keyboard():
-    markup = InlineKeyboardMarkup(row_width=2)
+# ================= 🎛️ এডমিন স্থায়ী রিপ্লাই কীবোর্ড (মেসেজ বক্সের নিচে) =================
+def get_admin_reply_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     
-    markup.add(
-        InlineKeyboardButton("🔄 ড্যাশবোর্ড রিফ্রেশ", callback_data="adm_refresh"),
-        InlineKeyboardButton("📋 চ্যানেল তালিকা", callback_data="adm_list_channels")
-    )
-    markup.add(
-        InlineKeyboardButton("🔴 গ্লোবাল পেইড (ON)", callback_data="adm_sub_on"),
-        InlineKeyboardButton("🟢 গ্লোবাল ফ্রি (OFF)", callback_data="adm_sub_off")
-    )
-    markup.add(
-        InlineKeyboardButton("👤 ইউজার যোগ করুন", callback_data="adm_add_user"),
-        InlineKeyboardButton("❌ ইউজার ব্যান/রিমুভ", callback_data="adm_del_user")
-    )
-    markup.add(
-        InlineKeyboardButton("🔴 চ্যানেল পেইড মোড", callback_data="adm_set_paid"),
-        InlineKeyboardButton("🟢 চ্যানেল ফ্রি মোড", callback_data="adm_set_free"),
-        InlineKeyboardButton("⚙️ মোড রিসেট", callback_data="adm_reset_chan")
-    )
-    markup.add(
-        InlineKeyboardButton("🔒 চ্যানেল টাইমার সেট", callback_data="adm_set_timer"),
-        InlineKeyboardButton("🔓 চ্যানেল আনলক", callback_data="adm_unlock_chan")
-    )
-    markup.add(
-        InlineKeyboardButton("💬 ইউজার রিপ্লাই", callback_data="adm_reply"),
-        InlineKeyboardButton("📁 ব্যাকআপ ডাটাবেস", callback_data="adm_backup")
-    )
+    markup.add(KeyboardButton("🔄 ড্যাশবোর্ড"), KeyboardButton("📋 চ্যানেল তালিকা"))
+    markup.add(KeyboardButton("🔴 গ্লোবাল পেইড (ON)"), KeyboardButton("🟢 গ্লোবাল ফ্রি (OFF)"))
+    markup.add(KeyboardButton("👤 ইউজার যোগ"), KeyboardButton("❌ ইউজার ব্যান"))
+    markup.add(KeyboardButton("🔴 চ্যানেল পেইড"), KeyboardButton("🟢 চ্যানেল ফ্রি"), KeyboardButton("⚙️ মোড রিসেট"))
+    markup.add(KeyboardButton("🔒 চ্যানেল টাইমার"), KeyboardButton("🔓 চ্যানেল আনলক"))
+    markup.add(KeyboardButton("💬 ইউজার রিপ্লাই"), KeyboardButton("📁 ব্যাকআপ ডাটাবেস"))
+    
     return markup
 
 def render_dashboard_text():
@@ -116,7 +84,7 @@ def render_dashboard_text():
            f"• নির্দিষ্ট পেইড চ্যানেল: <b>{paid_channels} টি</b>\n" \
            f"• নির্দিষ্ট ফ্রি চ্যানেল: <b>{free_channels} টি</b>\n" \
            f"• নিবন্ধিত টাইমার চ্যানেল: <b>{total_timers} টি</b>\n\n" \
-           f"👇 <i>সহজে পরিচালনা করতে নিচের ইনটারেক্টিভ বাটনে ক্লিক করুন:</i>"
+           f"👇 <i>নিচের স্থায়ী বাটন থেকে যেকোনো অপশন বেছে নিন:</i>"
 
 # ================= 🟢 স্টার্ট ও হেল্প কমান্ড =================
 @bot.message_handler(commands=['start', 'help'])
@@ -124,7 +92,7 @@ def send_welcome(message):
     user_id = message.from_user.id
     if user_id == ADMIN_ID:
         msg = render_dashboard_text()
-        bot.reply_to(message, msg, parse_mode='HTML', reply_markup=get_admin_keyboard())
+        bot.reply_to(message, msg, parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     else:
         result = db_query("SELECT expire_date FROM users WHERE user_id = ?", (user_id,), fetchone=True)
         
@@ -137,17 +105,75 @@ def send_welcome(message):
                   f"━━━━━━━━━━━━━━━━━━━━━━━\n" \
                   f"🆔 <b>আপনার ইউজার আইডি:</b> <code>{user_id}</code>\n" \
                   f"⏳ <b>মেয়াদের শেষ সময়:</b> <code>{exp.strftime('%Y-%m-%d %I:%M %p')}</code>\n\n" \
-                  f"✅ <b>স্ট্যাটাস:</b> আপনার প্রিমিয়াম ভিআইপি সাবস্ক্রিপশন সফলভাবে সক্রিয় রয়েছে। 💎"
+                  f"✅ <b>স্ট্যাটাস:</b> আপনার প্রিমিয়াম ভিআইপি সাবস্ক্রিপশন সক্রিয় রয়েছে। 💎"
         else:
             msg = f"<b>👋 স্বাগতম, {message.from_user.first_name}!</b>\n" \
                   f"━━━━━━━━━━━━━━━━━━━━━━━\n" \
                   f"🆔 <b>আপনার ইউজার আইডি:</b> <code>{user_id}</code>\n" \
                   f"📊 <b>বর্তমান স্ট্যাটাস:</b> 🔴 কোনো অ্যাক্টিভ সাবস্ক্রিপশন নেই\n\n" \
                   f"✨ আমাদের প্রিমিয়াম ভিআইপি চ্যানেলে যুক্ত হতে একটি অ্যাক্টিভ সাবস্ক্রিপশন প্রয়োজন।\n\n" \
-                  f"💬 সাবস্ক্রিপশন নিতে নিচে বটের চ্যাটে সরাসরি মেসেজ পাঠান।"
+                  f"💬 সাবস্ক্রিপশন নিতে বা এডমিনের সাথে কথা বলতে নিচে সরাসরি মেসেজ পাঠান।"
         bot.reply_to(message, msg, parse_mode='HTML', reply_markup=markup)
 
-# ================= 🛡 চ্যানেল ও সিস্টেম টেক্সট কমান্ডসমূহ =================
+# ================= 🛡 এডমিন বাটন প্রসেসর (Text Command Handling) =================
+@bot.message_handler(func=lambda message: message.from_user.id == ADMIN_ID and message.text in [
+    "🔄 ড্যাশবোর্ড", "📋 চ্যানেল তালিকা", "🔴 গ্লোবাল পেইড (ON)", "🟢 গ্লোবাল ফ্রি (OFF)",
+    "👤 ইউজার যোগ", "❌ ইউজার ব্যান", "🔴 চ্যানেল পেইড", "🟢 চ্যানেল ফ্রি", "⚙️ মোড রিসেট",
+    "🔒 চ্যানেল টাইমার", "🔓 চ্যানেল আনলক", "💬 ইউজার রিপ্লাই", "📁 ব্যাকআপ ডাটাবেস"
+])
+def handle_admin_buttons(message):
+    text = message.text
+    
+    if text == "🔄 ড্যাশবোর্ড":
+        bot.reply_to(message, render_dashboard_text(), parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
+        
+    elif text == "📋 চ্যানেল তালিকা":
+        list_channels(message)
+        
+    elif text == "🔴 গ্লোবাল পেইড (ON)":
+        db_query("UPDATE settings SET setting_value = 'ON' WHERE setting_key = 'sub_mode'", commit=True)
+        bot.reply_to(message, "✅ <b>গ্লোবাল সাবস্ক্রিপশন মোড ON করা হয়েছে!</b>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
+        
+    elif text == "🟢 গ্লোবাল ফ্রি (OFF)":
+        db_query("UPDATE settings SET setting_value = 'OFF' WHERE setting_key = 'sub_mode'", commit=True)
+        bot.reply_to(message, "🔓 <b>গ্লোবাল সাবস্ক্রিপশন মোড OFF (ফ্রি মোড) করা হয়েছে!</b>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
+        
+    elif text == "📁 ব্যাকআপ ডাটাবেস":
+        send_backup(message)
+        
+    elif text == "👤 ইউজার যোগ":
+        msg = bot.send_message(message.chat.id, "👤 <b>ইউজার আইডি এবং দিন লিখুন:</b>\n\n<i>উদাহরণ:</i> <code>123456789 30</code>", parse_mode='HTML')
+        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/add_user {m.text}"), add_user_time(m)])
+        
+    elif text == "❌ ইউজার ব্যান":
+        msg = bot.send_message(message.chat.id, "❌ <b>ব্যান/বাতিল করতে চাওয়া ইউজার আইডি লিখুন:</b>\n\n<i>উদাহরণ:</i> <code>123456789</code>", parse_mode='HTML')
+        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/del_user {m.text}"), delete_user(m)])
+        
+    elif text == "🔴 চ্যানেল পেইড":
+        msg = bot.send_message(message.chat.id, "🔴 <b>পেইড করতে চাওয়া চ্যানেল আইডি দিন:</b>\n\n<i>উদাহরণ:</i> <code>-1001234567890</code>", parse_mode='HTML')
+        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/set_paid {m.text}"), set_channel_paid(m)])
+        
+    elif text == "🟢 চ্যানেল ফ্রি":
+        msg = bot.send_message(message.chat.id, "🟢 <b>ফ্রি করতে চাওয়া চ্যানেল আইডি দিন:</b>\n\n<i>উদাহরণ:</i> <code>-1001234567890</code>", parse_mode='HTML')
+        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/set_free {m.text}"), set_channel_free(m)])
+        
+    elif text == "⚙️ মোড রিসেট":
+        msg = bot.send_message(message.chat.id, "⚙️ <b>রিসেট করতে চাওয়া চ্যানেল আইডি দিন:</b>\n\n<i>উদাহরণ:</i> <code>-1001234567890</code>", parse_mode='HTML')
+        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/del_channel {m.text}"), delete_channel_config(m)])
+        
+    elif text == "🔒 চ্যানেল টাইমার":
+        msg = bot.send_message(message.chat.id, "🔒 <b>চ্যানেল আইডি এবং লকিং এর দিন লিখুন:</b>\n\n<i>উদাহরণ:</i> <code>-1001234567890 7</code>", parse_mode='HTML')
+        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/set_channel_timer {m.text}"), set_channel_timer(m)])
+        
+    elif text == "🔓 চ্যানেল আনলক":
+        msg = bot.send_message(message.chat.id, "🔓 <b>আনলক করতে চাওয়া চ্যানেল আইডি দিন:</b>\n\n<i>উদাহরণ:</i> <code>-1001234567890</code>", parse_mode='HTML')
+        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/unlock_channel {m.text}"), unlock_channel(m)])
+        
+    elif text == "💬 ইউজার রিপ্লাই":
+        msg = bot.send_message(message.chat.id, "💬 <b>ইউজার আইডি এবং মেসেজ লিখুন:</b>\n\n<i>উদাহরণ:</i> <code>123456789 আপনার মেসেজ</code>", parse_mode='HTML')
+        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/reply {m.text}"), admin_manual_reply(m)])
+
+# ================= 🛡 চ্যানেল ও সিস্টেম ফাংশনসমূহ =================
 @bot.message_handler(commands=['list_channels', 'channels'])
 def list_channels(message):
     if message.from_user.id != ADMIN_ID: return
@@ -174,7 +200,7 @@ def list_channels(message):
               f"⏳ <b>টাইমার/অটো-লক চ্যানেলসমূহ ({len(timer_list)}টি):</b>\n{timer_str}\n\n" \
               f"💡 <i>মোড সরাতে লিখুন:</i> <code>/del_channel [Channel_ID]</code>"
         
-        bot.reply_to(message, msg, parse_mode='HTML')
+        bot.reply_to(message, msg, parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     except Exception as e:
         bot.reply_to(message, f"⚠️ সমস্যা হয়েছে: {e}")
 
@@ -185,7 +211,7 @@ def delete_channel_config(message):
         chat_id = int(message.text.split()[1])
         db_query("DELETE FROM channel_modes WHERE chat_id = ?", (chat_id,), commit=True)
         db_query("DELETE FROM channel_timers WHERE chat_id = ?", (chat_id,), commit=True)
-        bot.reply_to(message, f"⚙️ <b>চ্যানেল রিসেট সফল!</b>\n📢 চ্যানেল আইডি: <code>{chat_id}</code>", parse_mode='HTML')
+        bot.reply_to(message, f"⚙️ <b>চ্যানেল রিসেট সফল!</b>\n📢 চ্যানেল আইডি: <code>{chat_id}</code>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     except Exception:
         bot.reply_to(message, "⚠️ <b>ভুল নিয়ম!</b> ব্যবহার: <code>/del_channel [Channel_ID]</code>", parse_mode='HTML')
 
@@ -195,7 +221,7 @@ def set_channel_paid(message):
     try:
         chat_id = int(message.text.split()[1])
         db_query("INSERT OR REPLACE INTO channel_modes (chat_id, mode) VALUES (?, 'PAID')", (chat_id,), commit=True)
-        bot.reply_to(message, f"🔴 <b>চ্যানেল মোড সেট: PAID</b>\n📢 চ্যানেল আইডি: <code>{chat_id}</code>", parse_mode='HTML')
+        bot.reply_to(message, f"🔴 <b>চ্যানেল মোড সেট: PAID</b>\n📢 চ্যানেল আইডি: <code>{chat_id}</code>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     except Exception:
         bot.reply_to(message, "⚠️ <b>ভুল নিয়ম!</b> ব্যবহার: <code>/set_paid [Channel_ID]</code>", parse_mode='HTML')
 
@@ -205,21 +231,9 @@ def set_channel_free(message):
     try:
         chat_id = int(message.text.split()[1])
         db_query("INSERT OR REPLACE INTO channel_modes (chat_id, mode) VALUES (?, 'FREE')", (chat_id,), commit=True)
-        bot.reply_to(message, f"🟢 <b>চ্যানেল মোড সেট: FREE</b>\n📢 চ্যানেল আইডি: <code>{chat_id}</code>", parse_mode='HTML')
+        bot.reply_to(message, f"🟢 <b>চ্যানেল মোড সেট: FREE</b>\n📢 চ্যানেল আইডি: <code>{chat_id}</code>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     except Exception:
         bot.reply_to(message, "⚠️ <b>ভুল নিয়ম!</b> ব্যবহার: <code>/set_free [Channel_ID]</code>", parse_mode='HTML')
-
-@bot.message_handler(commands=['sub_on'])
-def sub_mode_on(message):
-    if message.from_user.id != ADMIN_ID: return
-    db_query("UPDATE settings SET setting_value = 'ON' WHERE setting_key = 'sub_mode'", commit=True)
-    bot.reply_to(message, "✅ <b>গ্লোবাল সাবস্ক্রিপশন মোড ON!</b>", parse_mode='HTML')
-
-@bot.message_handler(commands=['sub_off'])
-def sub_mode_off(message):
-    if message.from_user.id != ADMIN_ID: return
-    db_query("UPDATE settings SET setting_value = 'OFF' WHERE setting_key = 'sub_mode'", commit=True)
-    bot.reply_to(message, "🔓 <b>গ্লোবাল সাবস্ক্রিপশন মোড OFF! (ফ্রি মোড)</b>", parse_mode='HTML')
 
 @bot.message_handler(commands=['add_user'])
 def add_user_time(message):
@@ -230,7 +244,7 @@ def add_user_time(message):
         days = int(parts[2])
         expire_date = (datetime.now() + timedelta(days=days)).isoformat()
         db_query("INSERT OR REPLACE INTO users (user_id, expire_date) VALUES (?, ?)", (user_id, expire_date), commit=True)
-        bot.reply_to(message, f"✅ <b>ইউজার সাবস্ক্রিপশন যোগ করা হয়েছে!</b>\n👤 আইডি: <code>{user_id}</code>\n⏳ মেয়াদ: <b>{days} দিন</b>", parse_mode='HTML')
+        bot.reply_to(message, f"✅ <b>ইউজার সাবস্ক্রিপশন যোগ করা হয়েছে!</b>\n👤 আইডি: <code>{user_id}</code>\n⏳ মেয়াদ: <b>{days} দিন</b>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     except Exception:
         bot.reply_to(message, "⚠️ <b>ভুল নিয়ম!</b> ব্যবহার: <code>/add_user [User_ID] [দিন]</code>", parse_mode='HTML')
 
@@ -255,7 +269,7 @@ def delete_user(message):
             bot.send_message(user_id, "⚠ <b>আপনার প্রিমিয়াম সাবস্ক্রিপশন বাতিল করা হয়েছে এবং আপনাকে চ্যানেল থেকে রিমুভ করা হয়েছে।</b>", parse_mode='HTML')
         except Exception: pass
 
-        bot.reply_to(message, f"🗑️ <b>ইউজার সাবস্ক্রিপশন বাতিল ও ব্যান সফল!</b>\n👤 আইডি: <code>{user_id}</code>\n📢 রিমুভ চ্যানেল: <b>{removed_count} টি</b>", parse_mode='HTML')
+        bot.reply_to(message, f"🗑️ <b>ইউজার সাবস্ক্রিপশন বাতিল ও ব্যান সফল!</b>\n👤 আইডি: <code>{user_id}</code>\n📢 রিমুভ চ্যানেল: <b>{removed_count} টি</b>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     except Exception:
         bot.reply_to(message, "⚠️ <b>ভুল নিয়ম!</b> ব্যবহার: <code>/del_user [User_ID]</code>", parse_mode='HTML')
 
@@ -268,7 +282,7 @@ def set_channel_timer(message):
         days = int(parts[2])
         expire_date = (datetime.now() + timedelta(days=days)).isoformat()
         db_query("INSERT OR REPLACE INTO channel_timers (chat_id, expire_date) VALUES (?, ?)", (chat_id, expire_date), commit=True)
-        bot.reply_to(message, f"🚨 <b>চ্যানেল টাইমার সেট!</b>\n📢 চ্যানেল: <code>{chat_id}</code>\n⏳ সময়: <b>{days} দিন</b>", parse_mode='HTML')
+        bot.reply_to(message, f"🚨 <b>চ্যানেল টাইমার সেট!</b>\n📢 চ্যানেল: <code>{chat_id}</code>\n⏳ সময়: <b>{days} দিন</b>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     except Exception:
         bot.reply_to(message, "⚠️ <b>ভুল নিয়ম!</b> ব্যবহার: <code>/set_channel_timer [Channel_ID] [দিন]</code>", parse_mode='HTML')
 
@@ -278,7 +292,7 @@ def unlock_channel(message):
     try:
         chat_id = int(message.text.split()[1])
         db_query("DELETE FROM channel_timers WHERE chat_id = ?", (chat_id,), commit=True)
-        bot.reply_to(message, f"🔓 <b>চ্যানেল আনলক সফল!</b>\n📢 চ্যানেল: <code>{chat_id}</code>", parse_mode='HTML')
+        bot.reply_to(message, f"🔓 <b>চ্যানেল আনলক সফল!</b>\n📢 চ্যানেল: <code>{chat_id}</code>", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     except Exception:
         bot.reply_to(message, "⚠️ <b>ভুল নিয়ম!</b> ব্যবহার: <code>/unlock_channel [Channel_ID]</code>", parse_mode='HTML')
 
@@ -290,7 +304,7 @@ def admin_manual_reply(message):
         target_id = int(parts[1])
         text_to_send = parts[2]
         bot.send_message(target_id, f"<b>💬 এডমিন থেকে বার্তা:</b>\n\n{text_to_send}", parse_mode='HTML')
-        bot.reply_to(message, f"✅ ইউজার <code>{target_id}</code> এর কাছে মেসেজ পাঠানো হয়েছে।", parse_mode='HTML')
+        bot.reply_to(message, f"✅ ইউজার <code>{target_id}</code> এর কাছে মেসেজ পাঠানো হয়েছে।", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
     except Exception:
         bot.reply_to(message, "⚠️ <b>ভুল নিয়ম!</b> ব্যবহার: <code>/reply [User_ID] [মেসেজ]</code>", parse_mode='HTML')
 
@@ -306,80 +320,7 @@ def send_backup(message):
     except Exception as e:
         bot.reply_to(message, f"⚠ ব্যাকআপ নিতে সমস্যা: {e}")
 
-# ================= 🔘 বাটন ক্লিক হ্যাণ্ডেলার =================
-@bot.callback_query_handler(func=lambda call: call.from_user.id == ADMIN_ID)
-def handle_admin_callbacks(call):
-    if call.data == "adm_refresh":
-        msg = render_dashboard_text()
-        try:
-            bot.edit_message_text(msg, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode='HTML', reply_markup=get_admin_keyboard())
-            bot.answer_callback_query(call.id, "🔄 রিফ্রেশ করা হয়েছে!")
-        except Exception:
-            bot.answer_callback_query(call.id, "আপডেটেড আছে!")
-
-    elif call.data == "adm_list_channels":
-        bot.answer_callback_query(call.id)
-        list_channels(call.message)
-
-    elif call.data == "adm_sub_on":
-        db_query("UPDATE settings SET setting_value = 'ON' WHERE setting_key = 'sub_mode'", commit=True)
-        bot.answer_callback_query(call.id, "✅ গ্লোবাল পেইড ON!")
-        msg = render_dashboard_text()
-        try: bot.edit_message_text(msg, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode='HTML', reply_markup=get_admin_keyboard())
-        except Exception: pass
-
-    elif call.data == "adm_sub_off":
-        db_query("UPDATE settings SET setting_value = 'OFF' WHERE setting_key = 'sub_mode'", commit=True)
-        bot.answer_callback_query(call.id, "🔓 গ্লোবাল ফ্রি OFF!")
-        msg = render_dashboard_text()
-        try: bot.edit_message_text(msg, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode='HTML', reply_markup=get_admin_keyboard())
-        except Exception: pass
-
-    elif call.data == "adm_backup":
-        bot.answer_callback_query(call.id, "📁 ব্যাকআপ তৈরি হচ্ছে...")
-        send_backup(call.message)
-
-    elif call.data == "adm_add_user":
-        msg = bot.send_message(call.message.chat.id, "👤 <b>ইউজার আইডি এবং দিন লিখুন:</b>\n\n<i>উদাহরণ:</i> <code>123456789 30</code>", parse_mode='HTML')
-        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/add_user {m.text}"), add_user_time(m)])
-        bot.answer_callback_query(call.id)
-
-    elif call.data == "adm_del_user":
-        msg = bot.send_message(call.message.chat.id, "❌ <b>ব্যান/বাতিল করতে চাওয়া আইডি লিখুন:</b>\n\n<i>উদাহরণ:</i> <code>123456789</code>", parse_mode='HTML')
-        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/del_user {m.text}"), delete_user(m)])
-        bot.answer_callback_query(call.id)
-
-    elif call.data == "adm_set_paid":
-        msg = bot.send_message(call.message.chat.id, "🔴 <b>পেইড চ্যানেল আইডি দিন:</b>\n\n<i>উদাহরণ:</i> <code>-1001234567890</code>", parse_mode='HTML')
-        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/set_paid {m.text}"), set_channel_paid(m)])
-        bot.answer_callback_query(call.id)
-
-    elif call.data == "adm_set_free":
-        msg = bot.send_message(call.message.chat.id, "🟢 <b>ফ্রি চ্যানেল আইডি দিন:</b>\n\n<i>উদাহরণ:</i> <code>-1001234567890</code>", parse_mode='HTML')
-        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/set_free {m.text}"), set_channel_free(m)])
-        bot.answer_callback_query(call.id)
-
-    elif call.data == "adm_reset_chan":
-        msg = bot.send_message(call.message.chat.id, "⚙️ <b>রিসেট চ্যানেল আইডি দিন:</b>\n\n<i>উদাহরণ:</i> <code>-1001234567890</code>", parse_mode='HTML')
-        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/del_channel {m.text}"), delete_channel_config(m)])
-        bot.answer_callback_query(call.id)
-
-    elif call.data == "adm_set_timer":
-        msg = bot.send_message(call.message.chat.id, "🔒 <b>চ্যানেল আইডি ও দিন লিখুন:</b>\n\n<i>উদাহরণ:</i> <code>-1001234567890 7</code>", parse_mode='HTML')
-        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/set_channel_timer {m.text}"), set_channel_timer(m)])
-        bot.answer_callback_query(call.id)
-
-    elif call.data == "adm_unlock_chan":
-        msg = bot.send_message(call.message.chat.id, "🔓 <b>আনলক চ্যানেল আইডি দিন:</b>\n\n<i>উদাহরণ:</i> <code>-1001234567890</code>", parse_mode='HTML')
-        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/unlock_channel {m.text}"), unlock_channel(m)])
-        bot.answer_callback_query(call.id)
-
-    elif call.data == "adm_reply":
-        msg = bot.send_message(call.message.chat.id, "💬 <b>ইউজার আইডি ও মেসেজ লিখুন:</b>\n\n<i>উদাহরণ:</i> <code>123456789 হ্যালো</code>", parse_mode='HTML')
-        bot.register_next_step_handler(msg, lambda m: [setattr(m, 'text', f"/reply {m.text}"), admin_manual_reply(m)])
-        bot.answer_callback_query(call.id)
-
-# ================= 🚪 জয়েন রিকোয়েস্ট হ্যান্ডেলার =================
+# ================= 🚪 জয়েন রিকোয়েস্ট হ্যান্ডেলার (আপডেটেড মেসেজসহ) =================
 @bot.chat_join_request_handler()
 def handle_join_request(message: telebot.types.ChatJoinRequest):
     user_id = message.from_user.id
@@ -425,16 +366,21 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
             except Exception as e: print(f"Error: {e}")
             return
 
+    # ইউজার সাবস্ক্রাইবড না থাকলে মেসেজ
     try:
         bot.decline_chat_join_request(chat_id, user_id)
         markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("💳 সাবস্ক্রিপশন নিতে ক্লিক করুন", url="https://t.me/anisgazibd"))
+        markup.add(InlineKeyboardButton("💳 সরাসরি এডমিনকে মেসেজ দিন", url="https://t.me/anisgazibd"))
         
-        notice_msg = f"<b>✨ স্বাগতম! প্রাইভেট ভিআইপি চ্যানেল ✨</b>\n" \
+        notice_msg = f"<b>✨ স্বাগতম! প্রিমিয়াম প্রাইভেট ভিআইপি চ্যানেল ✨</b>\n" \
                      f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" \
                      f"📢 <b>চ্যানেল:</b> <b>{chat_name}</b>\n\n" \
-                     f"⚠️ এই এক্সক্লুসিভ চ্যানেলে যুক্ত হতে একটি সক্রিয় VIP প্রিমিয়াম সাবস্ক্রিপশন প্রয়োজন।\n\n" \
-                     f"🆔 <b>আপনার ইউজার আইডি:</b> <code>{user_id}</code>"
+                     f"⚠️ <b>বিশেষ বিজ্ঞপ্তি:</b> এই এক্সক্লুসিভ চ্যানেলে যুক্ত হতে একটি সক্রিয় VIP প্রিমিয়াম সাবস্ক্রিপশন প্রয়োজন।\n\n" \
+                     f"🆔 <b>আপনার ইউজার আইডি:</b> <code>{user_id}</code>\n" \
+                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" \
+                     f"💬 <b>এডমিনের সাথে কথা বলতে বা সাবস্ক্রিপশন নিতে:</b>\n\n" \
+                     f"১. সরাসরি <b>এই বটের চ্যাটবক্সে যেকোনো বার্তা বা আপনার প্রশ্ন লিখে পাঠিয়ে দিন</b>, এডমিন আপনার মেসেজের উত্তর দেবেন।\n" \
+                     f"২. অথবা সরাসরি টেলিগ্রামে কথা বলতে নিচের <b>'💳 সরাসরি এডমিনকে মেসেজ দিন'</b> বাটনে ক্লিক করুন।"
         
         bot.send_message(user_id, notice_msg, parse_mode='HTML', reply_markup=markup)
     except Exception: pass
@@ -447,7 +393,7 @@ def handle_user_messages(message):
     name = user.first_name + (f" {user.last_name}" if user.last_name else "")
     username = f"@{user.username}" if user.username else "নাই"
 
-    header = f"<b>📩 নতুন ইনকামিং মেসেজ!</b>\n" \
+    header = f"<b>📩 নতুন ইনকামিং সাপোর্ট মেসেজ!</b>\n" \
              f"━━━━━━━━━━━━━━━━━━━━━━━\n" \
              f"👤 <b>ইউজার:</b> {name} ({username})\n" \
              f"🆔 <b>ইউজার আইডি:</b> <code>{user_id}</code>"
@@ -455,7 +401,7 @@ def handle_user_messages(message):
     try:
         bot.send_message(ADMIN_ID, header, parse_mode='HTML')
         bot.forward_message(ADMIN_ID, message.chat.id, message.message_id)
-        bot.reply_to(message, "✅ <b>আপনার মেসেজটি এডমিনের নিকট পাঠানো হয়েছে!</b>", parse_mode='HTML')
+        bot.reply_to(message, "✅ <b>আপনার মেসেজটি এডমিনের নিকট পাঠানো হয়েছে!</b>\nঅনুগ্রহ করে এডমিন উত্তর দেওয়া পর্যন্ত অপেক্ষা করুন।", parse_mode='HTML')
     except Exception:
         bot.reply_to(message, "⚠️ এডমিনের সাথে যোগাযোগ করতে সমস্যা হয়েছে।")
 
@@ -475,16 +421,17 @@ def handle_admin_reply(message):
     if target_user_id:
         try:
             bot.send_message(target_user_id, f"<b>💬 এডমিন থেকে উত্তর:</b>\n\n{message.text}", parse_mode='HTML')
-            bot.reply_to(message, f"✅ ইউজার <code>{target_user_id}</code> এর কাছে উত্তর চলে গেছে!", parse_mode='HTML')
+            bot.reply_to(message, f"✅ ইউজার <code>{target_user_id}</code> এর কাছে উত্তর চলে গেছে!", parse_mode='HTML', reply_markup=get_admin_reply_keyboard())
         except Exception as e:
             bot.reply_to(message, f"❌ মেসেজ পাঠানো যায়নি: {e}")
     else:
-        bot.reply_to(message, "⚠️ ইউজারের আইডি চেনা যায়নি। কাস্টম কমান্ড ব্যবহার করুন: <code>/reply [User_ID] [মেসেজ]</code>", parse_mode='HTML')
+        bot.reply_to(message, "⚠️ ইউজারের আইডি চেনা যায়নি। কাস্টম বাটন ব্যবহার করুন।", parse_mode='HTML')
 
-# ================= ⏱️ ব্যাকগ্রাউন্ড চেকার =================
+# ================= ⏱️ ফাস্ট টাইমার চেকার ও অটো-ক্লিনআপ (Fix Slowness) =================
 def check_timers():
     now = datetime.now()
     
+    # ১. চ্যানেল টাইমার টেস্ট ও এক্সপায়ার ফিক্স
     channel_timers = db_query("SELECT chat_id, expire_date FROM channel_timers", fetchall=True) or []
     for ct in channel_timers:
         chat_id = ct[0]
@@ -494,8 +441,13 @@ def check_timers():
             for u in users_in_chat:
                 try: bot.ban_chat_member(chat_id, u[0])
                 except Exception: pass
+            
+            # মেম্বারদের রিমুভ করার পর চ্যানেল টাইমার ডাটা মুছে পেইড করে দেওয়া যাতে বার বার লুপ না মারে (Slowness Fix)
             db_query("DELETE FROM user_channels WHERE chat_id = ?", (chat_id,), commit=True)
+            db_query("DELETE FROM channel_timers WHERE chat_id = ?", (chat_id,), commit=True)
+            db_query("INSERT OR REPLACE INTO channel_modes (chat_id, mode) VALUES (?, 'PAID')", (chat_id,), commit=True)
 
+    # ২. ইন্ডিভিজুয়াল ইউজার সাবস্ক্রিপশন টাইম টেস্ট
     users = db_query("SELECT user_id, expire_date FROM users", fetchall=True) or []
     for u in users:
         user_id = u[0]
