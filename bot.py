@@ -6,7 +6,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 # ================= ⚙️ কনফিগারেশন =================
 BOT_TOKEN = '8919161117:AAEFTcbYlxbgduHDmKdcRKeszSY9-szepQ8'
-ADMIN_ID = 2132743108  # এখানে আপনার টেলিগ্রাম আইডি দিন
+ADMIN_ID = 2132743108  # আপনার টেলিগ্রাম আইডি
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -15,7 +15,6 @@ DB_FILE = 'pro_subscription.db'
 conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 cursor = conn.cursor()
 
-# তারিখ ফরম্যাট সঠিকভাবে পার্স করার হেল্পার ফাংশন (ক্র্যাশ হওয়া রোধ করবে)
 def parse_date(date_str):
     if not date_str:
         return datetime.now()
@@ -35,13 +34,37 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS user_channels (user_id INTEGER, cha
 cursor.execute('''CREATE TABLE IF NOT EXISTS channel_timers (chat_id INTEGER PRIMARY KEY, expire_date TEXT)''')
 cursor.execute('''CREATE TABLE IF NOT EXISTS settings (setting_key TEXT PRIMARY KEY, setting_value TEXT)''')
 
-# ডিফল্ট সাবস্ক্রিপশন মোড ON রাখা
 cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES ('sub_mode', 'ON')")
 conn.commit()
 
-# ================= 🛡️ এডমিন কমান্ডস =================
+# ================= 🟢 স্টার্ট ও হেল্প কমান্ড =================
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    user_id = message.from_user.id
+    if user_id == ADMIN_ID:
+        cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'sub_mode'")
+        res = cursor.fetchone()
+        sub_mode = res[0] if res else 'ON'
+        
+        msg = f"<b>👋 হ্যালো এডমিন!</b>\n\n" \
+              f"⚙️ <b>বর্তমান মোড:</b> {sub_mode}\n\n" \
+              f"<b>আপনার এডমিন কমান্ডসমূহ:</b>\n" \
+              f"• 🟢 /sub_on - পেইড সাবস্ক্রিপশন মোড চালু\n" \
+              f"• 🔴 /sub_off - ফ্রি মোড চালু\n" \
+              f"• 📌 <code>/add_user [User_ID] [দিন]</code> - ইউজার সাবস্ক্রিপশন যোগ\n" \
+              f"• 📌 <code>/set_channel_timer [Channel_ID] [দিন]</code> - চ্যানেল টাইমার সেট\n" \
+              f"• 📁 /backup - ম্যানুয়াল ডাটাবেস ব্যাকআপ"
+        bot.reply_to(message, msg, parse_mode='HTML')
+    else:
+        cursor.execute("SELECT expire_date FROM users WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        if result:
+            exp = parse_date(result[0])
+            bot.reply_to(message, f"<b>👋 স্বাগতম!</b>\n\n⏳ আপনার সাবস্ক্রিপশনের মেয়াদ: {exp.strftime('%Y-%m-%d %H:%M')}", parse_mode='HTML')
+        else:
+            bot.reply_to(message, "<b>👋 স্বাগতম!</b>\n\n⚠️ আপনার কোনো সক্রিয় সাবস্ক্রিপশন নেই।", parse_mode='HTML')
 
-# 🟢 সাবস্ক্রিপশন মোড ON করা (শুধু পেইড ইউজার)
+# ================= 🛡️ এডমিন কমান্ডস =================
 @bot.message_handler(commands=['sub_on'])
 def sub_mode_on(message):
     if message.from_user.id != ADMIN_ID: return
@@ -49,7 +72,6 @@ def sub_mode_on(message):
     conn.commit()
     bot.reply_to(message, "✅ <b>সাবস্ক্রিপশন মোড ON!</b>\nএখন থেকে শুধু মেয়াদ থাকা ইউজাররাই চ্যানেলে ঢুকতে পারবে।", parse_mode='HTML')
 
-# 🔴 সাবস্ক্রিপশন মোড OFF করা (ফ্রি মোড)
 @bot.message_handler(commands=['sub_off'])
 def sub_mode_off(message):
     if message.from_user.id != ADMIN_ID: return
@@ -57,7 +79,6 @@ def sub_mode_off(message):
     conn.commit()
     bot.reply_to(message, "🔓 <b>সাবস্ক্রিপশন মোড OFF! (ফ্রি মোড)</b>\nএখন থেকে যে কেউ রিকোয়েস্ট দিলে বট স্বয়ংক্রিয়ভাবে তাকে ফ্রিতে এক্সেপ্ট করে নেবে।", parse_mode='HTML')
 
-# 📌 ইউজারের সাবস্ক্রিপশন টাইম সেট করা
 @bot.message_handler(commands=['add_user'])
 def add_user_time(message):
     if message.from_user.id != ADMIN_ID: return
@@ -72,7 +93,6 @@ def add_user_time(message):
     except Exception as e:
         bot.reply_to(message, "⚠️ <b>ভুল কমান্ড!</b> নিয়ম: <code>/add_user [User_ID] [দিন]</code>", parse_mode='HTML')
 
-# 📌 নির্দিষ্ট চ্যানেলের টাইমার সেট করা (কিল-সুইচ)
 @bot.message_handler(commands=['set_channel_timer'])
 def set_channel_timer(message):
     if message.from_user.id != ADMIN_ID: return
@@ -87,7 +107,6 @@ def set_channel_timer(message):
     except Exception as e:
         bot.reply_to(message, "⚠️ <b>ভুল কমান্ড!</b> নিয়ম: <code>/set_channel_timer [Channel_ID] [দিন]</code>", parse_mode='HTML')
 
-# 📌 ম্যানুয়াল ডাটাবেস ব্যাকআপ
 @bot.message_handler(commands=['backup'])
 def send_backup(message):
     if message.from_user.id != ADMIN_ID: return
@@ -108,7 +127,6 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
     chat_name = message.chat.title or "চ্যানেল"
     now = datetime.now()
     
-    # ১. প্রথমে চেক করবে চ্যানেলটি লক (বন্ধ) হয়ে গেছে কিনা
     cursor.execute("SELECT expire_date FROM channel_timers WHERE chat_id = ?", (chat_id,))
     chan_timer = cursor.fetchone()
     if chan_timer:
@@ -118,14 +136,12 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
                 bot.decline_chat_join_request(chat_id, user_id)
                 bot.send_message(user_id, f"🚫 <b>{chat_name}</b> চ্যানেলটির মেয়াদ শেষ এবং এটি স্থায়ীভাবে বন্ধ করে দেওয়া হয়েছে।", parse_mode='HTML')
             except Exception: pass
-            return # চ্যানেল লক থাকলে এখানেই কাজ শেষ
+            return
 
-    # ২. সাবস্ক্রিপশন মোড চেক করা (ফ্রি নাকি পেইড)
     cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'sub_mode'")
     res = cursor.fetchone()
     sub_mode = res[0] if res else 'ON'
 
-    # ফ্রি মোড চালু থাকলে সবাইকে অটো-এক্সেপ্ট করবে
     if sub_mode == 'OFF':
         try:
             bot.approve_chat_join_request(chat_id, user_id)
@@ -135,7 +151,6 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
         except Exception as e: print(f"Error: {e}")
         return
 
-    # পেইড মোড চালু থাকলে সাবস্ক্রিপশন চেক করবে
     cursor.execute("SELECT expire_date FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     
@@ -163,7 +178,6 @@ def handle_join_request(message: telebot.types.ChatJoinRequest):
 def check_timers():
     now = datetime.now()
     
-    # ১. চ্যানেল টাইমার চেক (চ্যানেল লক করার জন্য)
     cursor.execute("SELECT chat_id, expire_date FROM channel_timers")
     channel_timers = cursor.fetchall()
     for ct in channel_timers:
@@ -173,16 +187,13 @@ def check_timers():
             cursor.execute("SELECT user_id FROM user_channels WHERE chat_id = ?", (chat_id,))
             users_in_chat = cursor.fetchall()
             
-            # চ্যানেলে থাকা সবাইকে ব্যান করা
             for u in users_in_chat:
                 try: bot.ban_chat_member(chat_id, u[0])
                 except Exception: pass
             
-            # ইউজারদের ডাটা মুছে দেওয়া
             cursor.execute("DELETE FROM user_channels WHERE chat_id = ?", (chat_id,))
             conn.commit()
 
-    # ২. ইউজার সাবস্ক্রিপশন চেক
     cursor.execute("SELECT user_id, expire_date FROM users")
     users = cursor.fetchall()
     for u in users:
@@ -209,7 +220,6 @@ def auto_backup():
                 bot.send_document(ADMIN_ID, doc, caption=f"🔄 অটো ডেইলি ব্যাকআপ\nসময়: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     except Exception as e: print(f"Backup Error: {e}")
 
-# শিডিউলার (প্রতি ১ মিনিটে চেক এবং প্রতি ২৪ ঘণ্টায় ব্যাকআপ)
 scheduler = BackgroundScheduler()
 scheduler.add_job(check_timers, 'interval', minutes=1)
 scheduler.add_job(auto_backup, 'interval', hours=24)
