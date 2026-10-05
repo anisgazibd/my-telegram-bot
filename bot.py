@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # ================= ⚙️ কনফিগারেশন =================
-BOT_TOKEN = '8919161117:AAEFTcbYlxbgduHDmKdcRKeszSY9-szepQ8'
+BOT_TOKEN = '8919161117:AAG-vSQf5JXJryi5Jq7ahn7i3UmHEQ6AqHo'
 PRIMARY_ADMIN_ID = 2132743108  # মূল প্রাইমারি এডমিন আইডি
 DEFAULT_MASTER_PASSWORD = 'Anis@2026'  # ডিফল্ট মাস্টার পাসওয়ার্ড
 
